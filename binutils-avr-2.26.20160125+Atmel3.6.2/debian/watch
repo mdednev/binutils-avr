@@ -1,0 +1,3 @@
+version=3
+opts=dversionmangle=s/^.*\+Atmel// \
+  http://distribute.atmel.no/tools/opensource/Atmel-AVR-GNU-Toolchain/ (\d+\.\d+\.\d+)/

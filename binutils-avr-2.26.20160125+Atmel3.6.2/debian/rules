@@ -1,0 +1,159 @@
+#!/usr/bin/make -f
+# Sample debian/rules that uses debhelper.
+# GNU copyright 1997 to 1999 by Joey Hess.
+
+PACKAGE=binutils-avr
+TARGET=avr
+
+DEB_HOST_GNU_TYPE = $(shell dpkg-architecture -q DEB_HOST_GNU_TYPE)
+DEB_BUILD_GNU_TYPE = $(shell dpkg-architecture -q DEB_BUILD_GNU_TYPE)
+
+CONFARGS = --prefix=/usr \
+           --build=$(DEB_BUILD_GNU_TYPE) \
+           --host=$(DEB_HOST_GNU_TYPE) \
+           --target=$(TARGET) \
+           --with-gnu-ld \
+           --with-gnu-as \
+		   --with-system-zlib \
+           --enable-install-libbfd \
+           --with-dwarf2 \
+           --disable-static \
+           --disable-gdb --disable-libdecnumber --disable-readline \
+           --disable-sim \
+           --disable-werror \
+           $(shell env DEB_CFLAGS_MAINT_APPEND="-Wno-implicit-fallthrough -Wno-format-overflow -Wno-pointer-compare -Wno-error=cast-function-type -Wno-error=stringop-truncation" \
+		     dpkg-buildflags --export=configure)
+
+
+# Uncomment this to turn on verbose mode.
+#export DH_VERBOSE=1
+
+#TAR_DIR=binutils-*
+#TAR_DIR=TAR_DIR=binutils-*
+#include /usr/share/dbs/dbs-build.mk
+#include debian/dbs-build.mk
+
+BUILD_TREE=binutils
+
+# the dbs rules
+#include /usr/src/toolchain/patches/binutils/dbs-build.mk
+#
+configure: configure-stamp
+configure-stamp:
+	dh_testdir
+
+	# Add here commands to configure the package.
+	#cd $(BUILD_TREE)/ld && aclocal-1.9 && automake-1.9
+	#cd $(BUILD_TREE) && env CC="gcc" CFLAGS="-Wno-error=unused-but-set-variable -Wno-error=unused-but-set-parameter" ./configure $(CONFARGS)
+	cd $(BUILD_TREE) && ./configure $(CONFARGS)
+	make -C $(BUILD_TREE) maybe-configure-bfd
+	make -C $(BUILD_TREE)/bfd/ headers
+	touch configure-stamp
+
+build: configure-stamp build-stamp
+build-stamp:
+	dh_testdir
+
+	# Add here commands to compile the package.
+	cd $(BUILD_TREE) && $(MAKE)
+	#/usr/bin/docbook-to-man debian/$(PACKAGE).sgml > $(PACKAGE).1
+
+	touch build-stamp
+
+build-arch: build
+build-indep: build	
+
+clean:
+	dh_testdir
+	dh_testroot
+	rm -f build-stamp configure-stamp a.out unpack-stamp patch-stamp
+
+	# Add here commands to clean up after the build process.
+	#-$(MAKE) clean
+	-$(MAKE) -C $(BUILD_TREE) distclean
+	#rm binutils-2.18.tar.bz2
+
+	dh_clean
+
+install: build
+	dh_testdir
+	dh_testroot
+	dh_clean -k
+	dh_installdirs
+
+	# Add here commands to install the package into debian/$(PACKAGE).
+	cd $(BUILD_TREE) && $(MAKE) install prefix=$(CURDIR)/debian/$(PACKAGE)/usr
+	#cp debian/gasp.1 debian/$(PACKAGE)/usr/share/man/man1/avr-gasp.1
+
+	# Non standard avr dir to keep FHS happy
+	mv debian/binutils-avr/usr/avr debian/binutils-avr/usr/lib/
+
+	# Convert hardlinks to softlinks
+	cd debian/binutils-avr/usr/lib/avr/bin && for f in *; do \
+	    rm ../../../bin/avr-$$f; \
+	    ln -s ../lib/avr/bin/$$f ../../../bin/avr-$$f; \
+	done
+
+	# Emptying the dependency_libs field of .la files
+	sed -i "/dependency_libs/ s/'.*'/''/" `find debian/binutils-avr -name '*.la'`
+
+	# Adjust paths
+	sed -i 's/\/usr\/x86_64-linux-gnu\/avr/\/usr\/lib\/avr\/x86_64-linux-gnu/' `find debian/binutils-avr -name '*.la'`
+
+	ln -s avr-ld.1.gz debian/binutils-avr/usr/share/man/man1/avr-ld.bfd.1.gz
+
+	# Files also in main binutils pkg
+	cd debian/$(PACKAGE)/usr && \
+	rm -rf lib/libiberty.* lib/libbfd.* lib/libopcodes* \
+	include/bfd.h include/ansidecl.h include/bfdlink.h \
+	share/locale include/symcat.h include/dis-asm.h \
+	info share/info share/man/man1/avr-c++filt.1.gz
+
+	mv debian/binutils-avr/usr/$(DEB_HOST_GNU_TYPE)/avr \
+	   debian/binutils-avr/usr/lib/avr/$(DEB_HOST_GNU_TYPE)
+	rm -r debian/binutils-avr/usr/$(DEB_HOST_GNU_TYPE)
+
+# Build architecture-independent files here.
+binary-indep: build install
+# We have nothing to do by default.
+
+# Build architecture-dependent files here.
+binary-arch: build install
+	dh_testdir
+	dh_testroot
+#	dh_installdebconf	
+	dh_installdocs -n
+#	dh_installexamples
+#	dh_installmenu
+#	dh_installlogrotate
+#	dh_installemacsen
+#	dh_installpam
+#	dh_installmime
+#	dh_installinit
+#	dh_installcron
+	dh_installman
+#	dh_installinfo
+	dh_installchangelogs
+	dh_link
+	dh_strip
+	dh_compress
+	dh_fixperms
+#	dh_makeshlibs
+	dh_installdeb
+#	dh_perl
+	dh_shlibdeps
+
+	# Update toolchain-source version reference (won't work as it's a source dependency)
+	#touch debian/substvars
+	#-grep -v '^toolchain-source-version=' debian/substvars > debian/substvars.tmp
+	#mv debian/substvars.tmp debian/substvars
+	#echo >> debian/substvars
+	#echo -n 'toolchain-source-version=' >> debian/substvars
+	#dpkg -s toolchain-source | grep Version: | sed -e 's/Version: //' >> debian/substvars
+
+	dh_gencontrol
+	dh_md5sums
+	dh_builddeb
+
+binary: binary-indep binary-arch
+.PHONY: build clean binary-indep binary-arch binary install configure

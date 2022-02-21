@@ -1,0 +1,2 @@
+configure args from atmel script
+dh_autoreconf
